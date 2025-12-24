@@ -1,12 +1,150 @@
 PARSER_BEGIN(Lovelace)
 import java.io.*;
+import java.util.ArrayList;
+import ast.*;
+
 public class Lovelace {
 
   public static void main(String args[]) throws ParseException,IOException {
     
  	Lovelace analisador = new Lovelace(new FileInputStream(args[0]));
  	Prog arvore = analisador.Lovelace();
+
+  geraCodigo(arvore,args[0]);
   }
+
+  public static void geraCodigo(Prog prog, String arquivo){
+    try {
+        // Define o nome do arquivo de saída (ex: teste.lov -> teste.c)
+        String nomeSaida = arquivo.substring(0, arquivo.lastIndexOf('.')) + ".c";
+        FileWriter fw = new FileWriter(nomeSaida);
+        PrintWriter pw = new PrintWriter(fw);
+
+        // 1. header padrão
+        pw.println("#include <stdio.h>");
+        pw.println("#include <stdbool.h>");
+        pw.println();
+
+        // 2. gera funções, se houver
+        if (prog.fun != null) {
+            for (Fun f : prog.fun) {
+                gerarFuncao(f, pw);
+            }
+        }
+
+        // 3. main
+        pw.println("int main() {");
+        
+        // var do main
+        for (VarDecl v : prog.main.vars) {
+            pw.println("  " + mapTipo(v.type) + " " + v.var + ";");
+        }
+
+        // com do main
+        for (Comando c : prog.main.coms) {
+            gerarComando(c, pw, "  ");
+        }
+
+        pw.println("  return 0;");
+        pw.println("}");
+        
+        pw.close();
+        System.out.println("Código C gerado com sucesso em: " + nomeSaida);
+
+    } catch (IOException e) {
+        System.err.println("Erro ao gravar arquivo: " + e.getMessage());
+    }
+  }
+
+  private static String mapTipo(String tipo) {
+    if (tipo.equals("Float")) return "float";
+    if (tipo.equals("Bool")) return "bool";
+    return "void";
+  }
+
+private static void gerarComando(Comando c, PrintWriter pw, String indent) {
+    if (c instanceof CAtribuicao) {
+        CAtribuicao cat = (CAtribuicao) c;
+        pw.println(indent + cat.var + " = " + gerarExp(cat.exp) + ";");
+    } else if (c instanceof CPrint) {
+        CPrint cp = (CPrint) c;
+        
+        pw.println(indent + "printf(\"%f\\n\", " + gerarExp(cp.exp) + ");");
+    } else if (c instanceof CReadInput) {
+        CReadInput cr = (CReadInput) c;
+        pw.println(indent + "scanf(\"%f\", &" + cr.var + ");");
+    } else if (c instanceof CReturn) {
+        CReturn cret = (CReturn) c;
+        pw.println(indent + "return " + gerarExp(cret.exp) + ";");
+    }else if (c instanceof CIf) {
+        CIf cif = (CIf) c;
+        pw.println(indent + "if " + gerarExp(cif.exp) + " {");
+        for (Comando subCom : cif.bloco) {
+            gerarComando(subCom, pw, indent + "  ");
+        }
+        pw.println(indent + "}");
+    }else if (c instanceof CWhile) {
+        CWhile cw = (CWhile) c;
+        pw.println(indent + "while " + gerarExp(cw.exp) + " {");
+        for (Comando subCom : cw.bloco) {
+            gerarComando(subCom, pw, indent + "  ");
+        }
+        pw.println(indent + "}");
+    }
+}
+
+private static void gerarFuncao(Fun f, PrintWriter pw) {
+    
+    pw.print(mapTipo(f.retorno) + " " + f.nome + "("); 
+    
+    if (f.params != null && !f.params.isEmpty()) {
+        for (int i = 0; i < f.params.size(); i++) {
+            ParamFormalFun p = f.params.get(i);
+            pw.print(mapTipo(p.type) + " " + p.var); 
+            if (i < f.params.size() - 1) pw.print(", ");
+        }
+    } else {
+        pw.print("void");
+    }
+    pw.println(") {");
+    
+    if (f.vars != null) {
+        for (VarDecl v : f.vars) {
+            pw.println("  " + mapTipo(v.type) + " " + v.var + ";");
+        }
+    }
+
+    for (Comando c : f.body) {
+        gerarComando(c, pw, "  ");
+    }
+    pw.println("}\n");
+}
+
+private static String gerarExp(Exp e) {
+    if (e instanceof EFloat) {
+        return String.valueOf(((EFloat) e).value); 
+    } else if (e instanceof EVar) {
+        return ((EVar) e).var; 
+    } else if (e instanceof ETrue) {
+        return "true"; 
+    } else if (e instanceof EFalse) {
+        return "false"; 
+    } else if (e instanceof EOpExp) {
+        EOpExp opEx = (EOpExp) e;
+        return "(" + gerarExp(opEx.arg1) + " " + opEx.op + " " + gerarExp(opEx.arg2) + ")";
+    } else if (e instanceof EChamadaFun) {
+        EChamadaFun cf = (EChamadaFun) e;
+        String args = "";
+        if (cf.args != null) {
+            for (int i = 0; i < cf.args.size(); i++) {
+                args += gerarExp(cf.args.get(i));
+                if (i < cf.args.size() - 1) args += ", ";
+            }
+        }
+        return cf.fun + "(" + args + ")";
+    }
+    return "";
+}
 
 }
 
@@ -86,30 +224,43 @@ Main Main():
   {return new Main(vars,coms);}
 }
 
-void Func():
-{VarDecl vardecl = null;}
+ArrayList<Fun> Func():
 {
-  <DEF> Tipo() <ID> <APAR> ( ListaArg())? <FPAR> 
-  <BEGIN>
-  vardecl =VarDecl()
-  SeqComandos()
-  <END>
+  ArrayList<Fun> lista = new ArrayList<Fun>(); 
+  String t; 
+  Token id; 
+  ArrayList<ParamFormalFun> p = new ArrayList<ParamFormalFun>();
+  ArrayList<VarDecl> v; 
+  ArrayList<Comando> c;
+}
+{
+  (
+    <DEF> t=Tipo() id=<ID> <APAR> ( p=ListaArg() )? <FPAR> 
+    <BEGIN>
+    v=VarDecl()
+    c=SeqComandos()
+    <END>
+    { lista.add(new Fun(id.image, p, t, v, c)); }
+  )+
+  { return lista; }
+}
+String Tipo() :
+{Token t=null;}
+{
+      t=<FLOAT> {return t.image;}
+    | t=<BOOL> {return t.image;}
+    | t=<VOID> {return t.image;}
 }
 
-void Tipo() :
-{}
+ArrayList<VarDecl> VarDecl():
+{ArrayList<VarDecl> vardecls = new ArrayList<VarDecl>(); String type=null; Token id=null;}
 {
-      <FLOAT>
-    | <BOOL>
-    | <VOID>
+  (<LET> type=Tipo() id=<ID> <PV>{ vardecls.add(new VarDecl(type, id.image));})*
+
+  {return vardecls;}
 }
 
-void VarDecl():
-{}
-{
-  (<LET> Tipo() <ID> <PV>)*
-}
-
+// Ok
 ArrayList<Comando> SeqComandos() :
 {ArrayList<Comando> coms = new ArrayList<Comando>(); Comando c=null;}
 {
@@ -119,69 +270,83 @@ ArrayList<Comando> SeqComandos() :
 }
 
 Comando Comando():
-{}
 {
-  <ID> ComandoLinha()
-  | <IF> Exp() <BEGIN> SeqComandos() <END> <PV>
-  | <WHILE> Exp() <BEGIN> SeqComandos() <END> <PV>
-  | <RETURN> Exp() <PV>
-  | <PRINT> Exp() <PV>
+  Token id; 
+  Exp e; 
+  ArrayList<Exp> args = null; 
+  ArrayList<Comando> bloco;
+}
+{
+  id=<ID> (
+      <ATRIB> (
+
+          <READ> <APAR> <FPAR> <PV> { return new CReadInput(id.beginLine, id.image); }
+        | e=Exp() <PV> { return new CAtribuicao(id.beginLine, id.image, e); }
+      )
+    | <APAR> (args=ListaExp())? <FPAR> <PV> { return new CChamadaFun(id.beginLine, id.image, args); }
+  )
+  | <IF> e=Exp() <BEGIN> bloco=SeqComandos() <END> <PV> 
+    { 
+ 
+      return new CIf(0, e, bloco); 
+    }
+  | <WHILE> e=Exp() <BEGIN> bloco=SeqComandos() <END> <PV> 
+    { return new CWhile(0, e, bloco); }
+  | <RETURN> e=Exp() <PV> 
+    { return new CReturn(0, e); }
+  | <PRINT> e=Exp() <PV> 
+    { return new CPrint(0, e); }
 }
 
-void ComandoLinha():
-{}
-{
-    <ATRIB> ( <READ> <APAR> <FPAR> | Exp()) <PV>
-  | <APAR> (ListaExp())? <FPAR> <PV>
-}
 Exp Exp():
-{}
+{Exp e1, e2; String op;}
 {
-  ( <APAR> Exp() Op() Exp() <FPAR>)
-  | Fator()
+  ( <APAR> e1=Exp() op=Op() e2=Exp() <FPAR> { return new EOpExp(op, e1, e2); } )
+  | e1=Fator() { return e1; }
 }
 
-void Op():
-{}
+String Op():
+{Token t=null;}
 {
-    <MAIS>
-  | <MENOS>
-  | <ASTER>
-  | <BARRA>
-  | <AND>
-  | <OR>
-  | <MENOR>
-  | <MAIOR>
-  | <IGUAL>
+    t=<MAIS> { return t.image;}
+  | t=<MENOS> { return t.image;}
+  | t=<ASTER> { return t.image;}
+  | t=<BARRA> { return t.image;}
+  | t=<AND> { return t.image;}
+  | t=<OR> { return t.image;}
+  | t=<MENOR> { return t.image;} 
+  | t=<MAIOR> { return t.image;}
+  | t=<IGUAL> {return t.image; }
 }
 
-//Ok
+
 Exp Fator() :
-{Exp resultado = null;}
-
+{Token t; ArrayList<Exp> args = null; Exp e;}
 {
-   <ID> ( <APAR> ( ListaExp()  )? <FPAR> )? {resultado = new EChamadaFun();}
-  | <NUMLITERAL> {resultado = new EFloat();}
-  | <TRUE> {resultado = new ETrue();}
-  | <FALSE> {resultado = new EFalse(); }
-
-  {return resutado;}
+  t=<ID> ( <APAR> ( args=ListaExp() )? <FPAR> { return new EChamadaFun(t.image, args); } )? 
+    { return new EVar(t.image); }
+  | t=<NUMLITERAL> { return new EFloat(Float.parseFloat(t.image)); }
+  | <TRUE> { return new ETrue(); }
+  | <FALSE> { return new EFalse(); }
 }
 
 // Ok
 ArrayList<Exp> ListaExp() :
 {ArrayList<Exp> listExp = new ArrayList<Exp>(); Exp e=null;}
 {
-    e=Exp() {listExp.add(e);}(<VIRGULA> Exp() {listExp.add(e);})*
+  e=Exp() {listExp.add(e);}(<VIRGULA> Exp() {listExp.add(e);})*
 
-    {return listExp;}
+  {return listExp;}
 }
 
-void ListaArg() :
-{}
+
+//Ok
+// ParamFormalFun
+ArrayList<ParamFormalFun> ListaArg() :
+{ArrayList<ParamFormalFun> params = new ArrayList<ParamFormalFun>(); String t; Token id;}
 {
-    Tipo() <ID>
-    (
-        <VIRGULA> Tipo() <ID>
-    )*
+  t=Tipo() id=<ID> { params.add(new ParamFormalFun(id.image, t)); } (<VIRGULA> t=Tipo() id=<ID> { params.add(new ParamFormalFun(id.image, t)); })*
+
+  {return params;}
 }
+
