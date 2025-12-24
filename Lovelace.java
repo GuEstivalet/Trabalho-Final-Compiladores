@@ -557,7 +557,7 @@ listExp.add(e);
   static final public ArrayList<ParamFormalFun> ListaArg() throws ParseException {ArrayList<ParamFormalFun> params = new ArrayList<ParamFormalFun>(); String t; Token id;
     t = Tipo();
     id = jj_consume_token(ID);
-params.add(new ParamFormalFun(id.image, t));
+params.add(new ParamFormalFun(t, id.image));
     label_5:
     while (true) {
       switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
@@ -572,7 +572,7 @@ params.add(new ParamFormalFun(id.image, t));
       jj_consume_token(VIRGULA);
       t = Tipo();
       id = jj_consume_token(ID);
-params.add(new ParamFormalFun(id.image, t));
+params.add(new ParamFormalFun(t, id.image));
     }
 {if ("" != null) return params;}
     throw new Error("Missing return statement in function");

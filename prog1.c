@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-float fatorial(void Float) {
+float fatorial(float x) {
   if (x == 0.0) {
     return 1.0;
   }

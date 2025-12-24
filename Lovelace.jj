@@ -244,6 +244,8 @@ ArrayList<Fun> Func():
   )+
   { return lista; }
 }
+
+
 String Tipo() :
 {Token t=null;}
 {
@@ -345,7 +347,7 @@ ArrayList<Exp> ListaExp() :
 ArrayList<ParamFormalFun> ListaArg() :
 {ArrayList<ParamFormalFun> params = new ArrayList<ParamFormalFun>(); String t; Token id;}
 {
-  t=Tipo() id=<ID> { params.add(new ParamFormalFun(id.image, t)); } (<VIRGULA> t=Tipo() id=<ID> { params.add(new ParamFormalFun(id.image, t)); })*
+  t=Tipo() id=<ID> { params.add(new ParamFormalFun(t, id.image)); } (<VIRGULA> t=Tipo() id=<ID> { params.add(new ParamFormalFun(t, id.image)); })*
 
   {return params;}
 }

@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-bool ehMaior(void Float, void Float) {
+bool ehMaior(float a, float b) {
   bool res;
   if (a > b) {
     res = true;
